@@ -28,13 +28,15 @@ class IngredientHealthSystem:
         
         # Slider nutrisi
         self.sliders = {}
-        self.sliders["Kalori Maksimum"] = self.create_slider(self.input_frame, "Kalori Maksimum", 0, 1000, 300, 1, 0)
-        self.sliders["Gula Maksimum (g)"] = self.create_slider(self.input_frame, "Gula Maksimum (g)", 0, 50, 25, 2, 0)
-        self.sliders["Karbohidrat Maksimum (g)"] = self.create_slider(self.input_frame, "Karbohidrat Maksimum (g)", 0, 100, 50, 3, 0)
-        self.sliders["Protein Minimum (g)"] = self.create_slider(self.input_frame, "Protein Minimum (g)", 0, 50, 10, 1, 2)
-        self.sliders["Lemak Maksimum (g)"] = self.create_slider(self.input_frame, "Lemak Maksimum (g)", 0, 50, 20, 2, 2)
-        self.sliders["Serat Minimum (g)"] = self.create_slider(self.input_frame, "Serat Minimum (g)", 0, 10, 2, 3, 2)
-        self.sliders["Vitamin C Minimum (mg)"] = self.create_slider(self.input_frame, "Vitamin C Minimum (mg)", 0, 100, 15, 4, 0)
+        self.sliders["Kalori"] = self.create_slider(self.input_frame, "Kalori", 0, 1000, 500, 1, 0)
+        self.sliders["Gula (g)"] = self.create_slider(self.input_frame, "Gula (g)", 0, 50, 25, 2, 0)
+        self.sliders["Karbohidrat (g)"] = self.create_slider(self.input_frame, "Karbohidrat (g)", 0, 100, 50, 3, 0)
+        self.sliders["Protein (g)"] = self.create_slider(self.input_frame, "Protein (g)", 0, 50, 25, 1, 2)
+        self.sliders["Lemak (g)"] = self.create_slider(self.input_frame, "Lemak (g)", 0, 50, 25, 2, 2)
+        self.sliders["Serat (g)"] = self.create_slider(self.input_frame, "Serat (g)", 0, 10, 5, 3, 2)
+        self.sliders["Vitamin C (mg)"] = self.create_slider(self.input_frame, "Vitamin C (mg)", 0, 100, 50, 4, 0)
+        self.sliders["Berat Badan (kg)"] = self.create_slider(self.input_frame, "Berat Badan (kg)", 0, 100, 50, 5, 0)
+        self.sliders["Tinggi Badan (cm)"] = self.create_slider(self.input_frame, "Tinggi Badan (cm)", 0, 200, 160, 6, 0)
         
         # Tombol hitung
         ttk.Button(self.input_frame, text="Hitung Skor Kesehatan", command=self.generate_health_score).grid(row=8, column=3, pady=20, padx=5)
@@ -68,27 +70,49 @@ class IngredientHealthSystem:
     
     def generate_health_score(self):
         preferences = {
-            "Kalori Maksimum": self.sliders["Kalori Maksimum"].get(),
-            "Gula Maksimum (g)": self.sliders["Gula Maksimum (g)"].get(),
-            "Karbohidrat Maksimum (g)": self.sliders["Karbohidrat Maksimum (g)"].get(),
-            "Protein Minimum (g)": self.sliders["Protein Minimum (g)"].get(),
-            "Lemak Maksimum (g)": self.sliders["Lemak Maksimum (g)"].get(),
-            "Serat Minimum (g)": self.sliders["Serat Minimum (g)"].get(),
-            "Vitamin C Minimum (mg)": self.sliders["Vitamin C Minimum (mg)"].get()
+            "Kalori": self.sliders["Kalori"].get(),
+            "Gula (g)": self.sliders["Gula (g)"].get(),
+            "Karbohidrat (g)": self.sliders["Karbohidrat (g)"].get(),
+            "Protein (g)": self.sliders["Protein (g)"].get(),
+            "Lemak (g)": self.sliders["Lemak (g)"].get(),
+            "Serat (g)": self.sliders["Serat (g)"].get(),
+            "Vitamin C (mg)": self.sliders["Vitamin C (mg)"].get(),
+            "Berat Badan (kg)": self.sliders["Berat Badan (kg)"].get(),
+            "Tinggi Badan (cm)": self.sliders["Tinggi Badan (cm)"].get()
         }
         
-        # Hitung skor real
-        score = RecommendationEngine.calculate_health_score(preferences)
+        # Sesuaikan skor berdasarkan tabel untuk perempuan 19-29 tahun
+        ideal_calories = 1900
+        ideal_protein = 29
+        ideal_fat = 29
+        ideal_carbs = 300
+        ideal_sugar = 65
+        ideal_fiber = 2
+        ideal_vitamin_c = 15
+        
+        weight = preferences["Berat Badan (kg)"]
+        height = preferences["Tinggi Badan (cm)"]
+        bmi = weight / ((height / 100) ** 2)
+        
+        # Penyesuaian skor berdasarkan BMI dan nilai ideal dari tabel
+        adjusted_score = RecommendationEngine.calculate_health_score(preferences)
+        if 18.5 <= bmi <= 24.9:  # Rentang BMI normal
+            adjusted_score += 10  # Bonus untuk BMI normal
+        elif bmi < 18.5 or bmi > 24.9:
+            adjusted_score -= 10  # Penalti untuk BMI di luar rentang normal
+        
+        # Pastikan skor tetap dalam rentang 0-100
+        adjusted_score = max(0, min(100, adjusted_score))
+        
         # Dapatkan kategori tunggal dari skor real
-        category = RecommendationEngine.categorize_health(score)
+        category = RecommendationEngine.categorize_health(adjusted_score)
         
         # Tampilkan kategori tunggal
         self.result_label.config(text=f"Kategori Kesehatan: {category}")
         
         # Simpan hasil dan update grafik
-        self.all_results.append((category, score))
+        self.all_results.append((category, adjusted_score))
         self.visualizer.update_charts(self.all_results)
-
 
 if __name__ == "__main__":
     root = tk.Tk()

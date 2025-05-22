@@ -3,28 +3,12 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class Visualizer:
     def __init__(self, master):
-        self.fig, (self.ax1, self.ax2) = plt.subplots(1, 2, figsize=(12, 5))
+        self.fig, self.ax2 = plt.subplots(1, 1, figsize=(6, 5))
         self.canvas = FigureCanvasTkAgg(self.fig, master=master)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
 
     def update_charts(self, results):
-        self.ax1.clear()
         self.ax2.clear()
-
-        # Bar chart berdasarkan hasil aktual (kategori dan skor real)
-        categories = [r[0] for r in results]
-        scores = [r[1] for r in results]
-
-        if categories and scores:
-            bars = self.ax1.barh(categories, scores)
-            self.ax1.set_xlabel('Skor Kesehatan (Nilai Real)')
-            self.ax1.set_title('Skor Kesehatan Berdasarkan Kategori')
-            for bar, score in zip(bars, scores):
-                # Tampilkan nilai skor real persis pada label
-                self.ax1.text(bar.get_width() + 1, bar.get_y() + bar.get_height()/2,
-                              f'{score:.1f}', va='center')
-        else:
-            self.ax1.text(0.5, 0.5, 'Tidak ada data', ha='center', va='center')
 
         # Pie chart statis sebagai informasi kategori rentang skor
         labels = [

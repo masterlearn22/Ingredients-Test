@@ -57,26 +57,69 @@ class RecommendationEngine:
         return low, sufficient, high
 
     @staticmethod
+    def fuzzify_bmi(bmi):
+        """
+        Memfuzzifikasi nilai BMI menjadi derajat keanggotaan Underweight, Normal, Overweight.
+        Rentang berdasarkan WHO: Underweight < 18.5, Normal 18.5-24.9, Overweight >= 25.
+        Adjusted for new range (0-100 kg, 0-200 cm).
+        """
+        underweight = 0
+        normal = 0
+        overweight = 0
+
+        # Underweight (<18.5)
+        if bmi <= 16:
+            underweight = 1
+        elif 16 < bmi < 18.5:
+            underweight = (18.5 - bmi) / (18.5 - 16)
+
+        # Normal (18.5-24.9)
+        if 18.5 <= bmi <= 24.9:
+            normal = 1
+        elif 16 < bmi < 18.5:
+            normal = (bmi - 16) / (18.5 - 16)
+        elif 24.9 < bmi < 27:
+            normal = (27 - bmi) / (27 - 24.9)
+
+        # Overweight (>=25)
+        if bmi >= 27:
+            overweight = 1
+        elif 24.9 < bmi < 27:
+            overweight = (bmi - 24.9) / (27 - 24.9)
+
+        return underweight, normal, overweight
+
+    @staticmethod
     def calculate_health_score(preferences):
         """
-        Menghitung skor kesehatan menggunakan logika fuzzy dan metode Mamdani.
+        Menghitung skor kesehatan menggunakan logika fuzzy dan metode Mamdani, dengan tambahan BMI.
         """
-        max_calories = preferences["Kalori Maksimum"]
-        max_sugar = preferences["Gula Maksimum (g)"]
-        max_carbs = preferences["Karbohidrat Maksimum (g)"]
-        min_protein = preferences["Protein Minimum (g)"]
-        max_fat = preferences["Lemak Maksimum (g)"]
-        min_fiber = preferences["Serat Minimum (g)"]
-        min_vitamin_c = preferences["Vitamin C Minimum (mg)"]
+        calories = preferences["Kalori"]
+        sugar = preferences["Gula (g)"]
+        carbs = preferences["Karbohidrat (g)"]
+        protein = preferences["Protein (g)"]
+        fat = preferences["Lemak (g)"]
+        fiber = preferences["Serat (g)"]
+        vitamin_c = preferences["Vitamin C (mg)"]
+        weight = preferences["Berat Badan (kg)"]
+        height = preferences["Tinggi Badan (cm)"]
 
-        calories_fuzzy = RecommendationEngine.fuzzify_value(max_calories, (0, 250), (250, 450), (450, 600))
-        sugar_fuzzy = RecommendationEngine.fuzzify_value(max_sugar, (0, 10), (10, 25), (25, 50))
-        carbs_fuzzy = RecommendationEngine.fuzzify_value(max_carbs, (0, 40), (40, 70), (70, 100))
-        fat_fuzzy = RecommendationEngine.fuzzify_value(max_fat, (0, 10), (10, 25), (25, 50))
+        # Hitung BMI
+        if height > 0:  # Hindari pembagian oleh nol
+            height_m = height / 100  # Konversi cm ke meter
+            bmi = weight / (height_m ** 2)
+        else:
+            bmi = 0  # Default jika tinggi nol
 
-        protein_fuzzy = RecommendationEngine.fuzzify_min_value(min_protein, (0, 15), (15, 35), (35, 50))
-        fiber_fuzzy = RecommendationEngine.fuzzify_min_value(min_fiber, (0, 3), (3, 7), (7, 10))
-        vitamin_c_fuzzy = RecommendationEngine.fuzzify_min_value(min_vitamin_c, (0, 40), (40, 80), (80, 100))
+        # Fuzzifikasi
+        calories_fuzzy = RecommendationEngine.fuzzify_value(calories, (0, 250), (250, 450), (450, 2000))
+        sugar_fuzzy = RecommendationEngine.fuzzify_value(sugar, (0, 10), (10, 25), (25, 65))
+        carbs_fuzzy = RecommendationEngine.fuzzify_value(carbs, (0, 40), (40, 70), (70, 300))
+        fat_fuzzy = RecommendationEngine.fuzzify_value(fat, (0, 10), (10, 25), (25, 29))
+        protein_fuzzy = RecommendationEngine.fuzzify_min_value(protein, (0, 15), (15, 35), (35, 50))
+        fiber_fuzzy = RecommendationEngine.fuzzify_min_value(fiber, (0, 3), (3, 7), (7, 10))
+        vitamin_c_fuzzy = RecommendationEngine.fuzzify_min_value(vitamin_c, (0, 40), (40, 80), (80, 100))
+        bmi_fuzzy = RecommendationEngine.fuzzify_bmi(bmi)
 
         health_levels = {
             "Sangat Tidak Sehat": 0,
@@ -87,20 +130,23 @@ class RecommendationEngine:
         }
 
         weights = {
-            "Sangat Tidak Sehat": 2.0,  # Further increased weight for extreme cases
+            "Sangat Tidak Sehat": 2.0,
             "Tidak Sehat": 1.0,
             "Sehat": 1.0,
             "Cukup Sehat": 1.2,
             "Sangat Sehat": 1.3
         }
 
-        # Rule 1: Sangat Tidak Sehat (all max nutrients HIGH AND all min nutrients LOW)
-        rule1 = min(max(calories_fuzzy[2], sugar_fuzzy[2], carbs_fuzzy[2], fat_fuzzy[2]),
-                    max(protein_fuzzy[0], fiber_fuzzy[0], vitamin_c_fuzzy[0]))
+        # Rule 1: Sangat Tidak Sehat (all nutrients HIGH AND all min nutrients LOW AND BMI Underweight/Overweight)
+        rule1 = min(
+            max(calories_fuzzy[2], sugar_fuzzy[2], carbs_fuzzy[2], fat_fuzzy[2]),
+            max(protein_fuzzy[0], fiber_fuzzy[0], vitamin_c_fuzzy[0]),
+            max(bmi_fuzzy[0], bmi_fuzzy[2])
+        )
         if (calories_fuzzy[2] == 1.0 and sugar_fuzzy[2] == 1.0 and carbs_fuzzy[2] == 1.0 and fat_fuzzy[2] == 1.0 and
-            protein_fuzzy[0] == 1.0 and fiber_fuzzy[0] == 1.0 and vitamin_c_fuzzy[0] == 1.0):
+            protein_fuzzy[0] == 1.0 and fiber_fuzzy[0] == 1.0 and vitamin_c_fuzzy[0] == 1.0 and
+            (bmi_fuzzy[0] == 1.0 or bmi_fuzzy[2] == 1.0)):
             health_levels["Sangat Tidak Sehat"] = rule1 * weights["Sangat Tidak Sehat"]
-            # If Rule 1 is fully triggered, override other rules
             health_levels["Tidak Sehat"] = 0
             health_levels["Sehat"] = 0
             health_levels["Cukup Sehat"] = 0
@@ -109,38 +155,57 @@ class RecommendationEngine:
             denominator = health_levels["Sangat Tidak Sehat"]
             return numerator / denominator if denominator != 0 else 50
 
-        # Rule 2: Tidak Sehat (medium to high max nutrients AND low to medium min nutrients)
-        rule2 = min(max(calories_fuzzy[1], calories_fuzzy[2], sugar_fuzzy[1], sugar_fuzzy[2],
-                        carbs_fuzzy[1], carbs_fuzzy[2], fat_fuzzy[1], fat_fuzzy[2]),
-                    max(protein_fuzzy[0], protein_fuzzy[1], fiber_fuzzy[0], fiber_fuzzy[1], vitamin_c_fuzzy[0], vitamin_c_fuzzy[1]))
+        # Rule 2: Tidak Sehat (medium to high nutrients AND low to medium min nutrients AND BMI Underweight/Overweight)
+        rule2 = min(
+            max(calories_fuzzy[1], calories_fuzzy[2], sugar_fuzzy[1], sugar_fuzzy[2],
+                carbs_fuzzy[1], carbs_fuzzy[2], fat_fuzzy[1], fat_fuzzy[2]),
+            max(protein_fuzzy[0], protein_fuzzy[1], fiber_fuzzy[0], fiber_fuzzy[1], vitamin_c_fuzzy[0], vitamin_c_fuzzy[1]),
+            max(bmi_fuzzy[0], bmi_fuzzy[2])
+        )
         health_levels["Tidak Sehat"] = max(health_levels["Tidak Sehat"], rule2 * weights["Tidak Sehat"])
 
-        # Rule 3: Sehat (low to medium max nutrients AND sufficient min nutrients)
-        rule3 = min(max(calories_fuzzy[0], calories_fuzzy[1], sugar_fuzzy[0], sugar_fuzzy[1],
-                        carbs_fuzzy[0], carbs_fuzzy[1], fat_fuzzy[0], fat_fuzzy[1]),
-                    max(protein_fuzzy[1], fiber_fuzzy[1], vitamin_c_fuzzy[1]))
+        # Rule 3: Sehat (low to medium nutrients AND sufficient min nutrients AND BMI Normal)
+        rule3 = min(
+            max(calories_fuzzy[0], calories_fuzzy[1], sugar_fuzzy[0], sugar_fuzzy[1],
+                carbs_fuzzy[0], carbs_fuzzy[1], fat_fuzzy[0], fat_fuzzy[1]),
+            max(protein_fuzzy[1], fiber_fuzzy[1], vitamin_c_fuzzy[1]),
+            bmi_fuzzy[1]
+        )
         health_levels["Sehat"] = max(health_levels["Sehat"], rule3 * weights["Sehat"])
 
-        # Rule 4: Cukup Sehat (low max nutrients AND sufficient to high min nutrients)
-        rule4 = min(max(calories_fuzzy[0], sugar_fuzzy[0], carbs_fuzzy[0], fat_fuzzy[0]),
-                    max(protein_fuzzy[1], protein_fuzzy[2], fiber_fuzzy[1], fiber_fuzzy[2], vitamin_c_fuzzy[1], vitamin_c_fuzzy[2]))
+        # Rule 4: Cukup Sehat (low nutrients AND sufficient to high min nutrients AND BMI Normal)
+        rule4 = min(
+            max(calories_fuzzy[0], sugar_fuzzy[0], carbs_fuzzy[0], fat_fuzzy[0]),
+            max(protein_fuzzy[1], protein_fuzzy[2], fiber_fuzzy[1], fiber_fuzzy[2], vitamin_c_fuzzy[1], vitamin_c_fuzzy[2]),
+            bmi_fuzzy[1]
+        )
         health_levels["Cukup Sehat"] = max(health_levels["Cukup Sehat"], rule4 * weights["Cukup Sehat"])
 
-        # Rule 5: Sangat Sehat (low max nutrients AND high min nutrients)
-        rule5 = min(max(calories_fuzzy[0], sugar_fuzzy[0], carbs_fuzzy[0], fat_fuzzy[0]),
-                    max(protein_fuzzy[2], fiber_fuzzy[2], vitamin_c_fuzzy[2]))
+        # Rule 5: Sangat Sehat (low nutrients AND high min nutrients AND BMI Normal)
+        rule5 = min(
+            max(calories_fuzzy[0], sugar_fuzzy[0], carbs_fuzzy[0], fat_fuzzy[0]),
+            max(protein_fuzzy[2], fiber_fuzzy[2], vitamin_c_fuzzy[2]),
+            bmi_fuzzy[1]
+        )
         health_levels["Sangat Sehat"] = max(health_levels["Sangat Sehat"], rule5 * weights["Sangat Sehat"])
 
-        # Rule 6: Tidak Sehat (high sugar OR fat AND low protein OR fiber)
-        rule6 = min(max(sugar_fuzzy[2], fat_fuzzy[2]),
-                    max(protein_fuzzy[0], fiber_fuzzy[0]))
+        # Rule 6: Tidak Sehat (high sugar OR fat AND low protein OR fiber AND BMI Underweight/Overweight)
+        rule6 = min(
+            max(sugar_fuzzy[2], fat_fuzzy[2]),
+            max(protein_fuzzy[0], fiber_fuzzy[0]),
+            max(bmi_fuzzy[0], bmi_fuzzy[2])
+        )
         health_levels["Tidak Sehat"] = max(health_levels["Tidak Sehat"], rule6 * weights["Tidak Sehat"])
 
-        # Rule 7: Cukup Sehat (low calories AND high protein OR fiber)
-        rule7 = min(calories_fuzzy[0],
-                    max(protein_fuzzy[2], fiber_fuzzy[2]))
+        # Rule 7: Cukup Sehat (low calories AND high protein OR fiber AND BMI Normal)
+        rule7 = min(
+            calories_fuzzy[0],
+            max(protein_fuzzy[2], fiber_fuzzy[2]),
+            bmi_fuzzy[1]
+        )
         health_levels["Cukup Sehat"] = max(health_levels["Cukup Sehat"], rule7 * weights["Cukup Sehat"])
 
+        # Defuzzifikasi
         crisp_values = {
             "Sangat Tidak Sehat": 10,
             "Tidak Sehat": 30,
